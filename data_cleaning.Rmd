@@ -1,0 +1,608 @@
+---
+title: Effects of the COVID-19 pandemic over the Purchase and awareness of Cyber Security measures
+date: "07/06/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE, warning=F}
+library(tidyverse)
+#library to calculate mode
+library(modeest)
+
+
+library(corrplot)
+library("Hmisc")
+
+
+library(PerformanceAnalytics)
+```
+
+
+```{r, include=FALSE, warning=F}
+#loading data
+dataframe <- read_csv("cpss2020sepc_s5_p.csv")
+```
+
+
+# Filtering out the variables of interest and renaming the columns
+
+## Incident 
+```{r}
+# Incident
+# 1 = Yes , 2 = No
+# col 2:14 -> Incident = Yes, col 15 -> No
+incident.1 <- select(dataframe, 1:15)
+# filtering out the values and assigning values
+## Logic: 
+## Change all the 2s to 0 for ease of logic
+## sum the incident cols if Score between 1-125 then assign a YES else remove the other entries
+
+# changing all the 2s to 0                    [https://stackoverflow.com/questions/19503266/replace-all-particular-values-in-a-data-frame]
+incident.1[incident.1 == 2] <- 0
+# summing the cols
+
+# Sanity checks, # checking the logic
+## Made sure if the sum of the 2 cols is the same when we check individual frequencies using 
+## table(incident.2$CS_05N) 0's and 9's and table(incident.2$Incident_Sum) 1's and 117 are equal
+
+incident.2 <- incident.1 %>% mutate(Incident_Sum = rowSums(incident.1[,2:14]))
+
+# removing the people who refused to answer any of the questions
+# [https://statisticsglobe.com/r-remove-row-from-data-frame-condition]
+incident.3 <- incident.2[incident.2$Incident_Sum != 117,]  
+
+
+incident.4 <- incident.3 %>% mutate(Incident = case_when(incident.3$Incident_Sum == 0 ~ "No",
+                                                         incident.3$Incident_Sum > 0 ~ "Yes"
+                                                         ))
+# did sanity checks with sums(), table()
+# just keeping the required cols ie. PUMFid and INCIDENT
+incident <- select(incident.4, 1,17)
+```
+
+## Loss, 
+```{r}
+# 1 = Yes , 2 = No
+# col 16:21
+loss.1 <- select(dataframe, 1,16:21)
+
+# changing all the 2s to 0                    [https://stackoverflow.com/questions/19503266/replace-all-particular-values-in-a-data-frame]
+loss.1[loss.1 == 2] <- 0
+
+loss.2 <- loss.1 %>% mutate(Loss_Sum = rowSums(loss.1[,2:6]))
+
+
+
+# logic if sum of valid skips(30 or 0) == No in loss experienced then just use loss expereinced
+## used the table() to verify the logic
+## Further more remove the ppl who didn't answer ie sum =45 OR CS_10G = 9 
+## when making joins the ones who don't apply will get filtered out
+loss.3 <- loss.2[loss.2$Loss_Sum != 45, ]
+                                        ## FIX logic but for now NA = YES 
+loss.4 <- loss.3 %>%                                                
+mutate(Loss = case_when(loss.3$Loss_Sum == 0 ~ "No",
+                            loss.3$Loss_Sum > 0 && loss.3$Loss_Sum < 29  ~ "Yes",
+                            loss.3$Loss_Sum == 30 ~ "No",
+                            ))
+
+loss.4[is.na(loss.4)] <- "Yes"
+
+
+
+# did sanity checks with sums(), table()
+# just keeping the required cols ie. PUMFid and INCIDENT
+loss <- select(loss.4, 1, 9)
+```
+
+# Reported
+```{r}
+# CS_15L col# 30 Q. Reported cyber sec incident(s): Did not report the incident(s)
+reported.1 <- select(dataframe, 1,30)
+# Remove all the NA values in the dataframe
+reported.2 <- reported.1[reported.1$CS_15L != 9, ]
+
+# Here we treat a "valid skip" as "No" for the people who did not experience a loss
+reported.3 <- reported.2 %>%
+  mutate(Reported = case_when(reported.2$CS_15L == 1 | reported.2$CS_15L == 6 ~ "No",
+                              reported.2$CS_15L == 2 ~ "Yes"
+                              ))
+#filtering out the required Col
+reported <- select(reported.3, 1,3)
+```
+
+# WFH, 
+```{r}
+# PCS_20E col#  Q.WFH during COVID-19: Did not work from home
+wfh.1 <- select(dataframe, 1,36)
+# remove all the NA(values not stated) values
+wfh.2 <- wfh.1[wfh.1$PCS_20E != 9,]
+# assign the conversion of data variables
+wfh.3 <- wfh.2 %>%
+  mutate(WFH = case_when(wfh.2$PCS_20E == 1 ~ "No",
+                         wfh.2$PCS_20E == 2 ~ "Yes"))
+wfh <- select(wfh.3, 1, 3)
+```
+
+# Shop Online
+```{r}
+#PCS_45H Q. Did not shop online?
+so.1 <- select(dataframe, 1, PCS_45H)
+#remove all the NA values
+so.2 <- so.1[so.1$PCS_45H !=9,]
+# conversion of data variables
+so.3 <- so.2 %>%
+  mutate(OnlineShopping = case_when(so.2$PCS_45H ==1 ~ "No",
+                         so.2$PCS_45H == 2 ~ "Yes"))
+OS <- select(so.3, 1, 3)
+```
+
+# Sex
+No Gender choice, sex is binary copared to gender
+```{r}
+#SEX Q. Sex of respondent
+sex.1 <- select(dataframe, 1 ,SEX)
+sex.2 <- sex.1 %>% mutate(Sex = case_when(sex.1$SEX == 1 ~ "Male",
+                                          sex.1$SEX ==2 ~ "Female"))
+SEX <- select(sex.2, 1,3)
+```
+
+
+# Household Internet use frequency during Covid
+
+## House hold Social media services use, 
+```{r}
+#Inc Dec StaySame CPD_05A
+social.1 <- select(dataframe,1,CPD_05A)
+#remove all the NA values
+social.2 <- social.1[social.1$CPD_05A != 9,]
+#assiging the variables
+social.3 <- social.2 %>% mutate(Social_Media_Use = case_when(social.2$CPD_05A == 1 ~ "Increase",
+                                                             social.2$CPD_05A == 2 ~ "Same",
+                                                             social.2$CPD_05A == 3 ~ "Decrease",
+                                                             social.2$CPD_05A == 4 ~ "Not Applicable",
+                                                             ))
+social <- select(social.3, 1, 3)
+```
+
+## house hold Online video streaming services, 
+```{r}
+#Inc Dec StaySame CPD_05B
+vid.1 <- select(dataframe,1,CPD_05B)
+#remove all the NA values
+vid.2 <- vid.1[vid.1$CPD_05B != 9,]
+#assiging the variables
+vid.3 <- vid.2 %>% mutate(Video_Streaming = case_when(vid.2$CPD_05B == 1 ~ "Increase",
+                                                             vid.2$CPD_05B == 2 ~ "Same",
+                                                             vid.2$CPD_05B == 3 ~ "Decrease",
+                                                             vid.2$CPD_05B == 4 ~ "Not Applicable",
+                                                             ))
+vid <- select(vid.3, 1, 3)
+```
+
+
+## Audio streaming, 
+```{r}
+#Inc Dec StaySame CPD_05C
+audio.1 <- select(dataframe,1,CPD_05C)
+#remove all the NA values
+audio.2 <- audio.1[audio.1$CPD_05C != 9,]
+#assiging the variables
+audio.3 <- audio.2 %>% mutate(Audio_Streaming = case_when(audio.2$CPD_05C == 1 ~ "Increase",
+                                                             audio.2$CPD_05C == 2 ~ "Same",
+                                                             audio.2$CPD_05C == 3 ~ "Decrease",
+                                                             audio.2$CPD_05C == 4 ~ "Not Applicable",
+                                                             ))
+audio <- select(audio.3, 1, 3)
+```
+
+## productivity services,
+```{r}
+#Inc Dec StaySame CPD_05D
+prod_serv.1 <- select(dataframe,1,CPD_05D)
+#remove all the NA values
+prod_serv.2 <- prod_serv.1[prod_serv.1$CPD_05D != 9,]
+#assiging the variables
+prod_serv.3 <- prod_serv.2 %>% mutate(Prod_Services = case_when(prod_serv.2$CPD_05D == 1 ~ "Increase",
+                                                             prod_serv.2$CPD_05D == 2 ~ "Same",
+                                                             prod_serv.2$CPD_05D == 3 ~ "Decrease",
+                                                             prod_serv.2$CPD_05D == 4 ~ "Not Applicable",
+                                                             ))
+prod_serv <- select(prod_serv.3, 1, 3)
+```
+
+## online information services, 
+```{r}
+#Inc Dec StaySame CPD_05E
+info_serv.1 <- select(dataframe,1,CPD_05E)
+#remove all the NA values
+info_serv.2 <- info_serv.1[info_serv.1$CPD_05E != 9,]
+#assiging the variables
+info_serv.3 <- info_serv.2 %>% mutate(Inform_Services = case_when(info_serv.2$CPD_05E == 1 ~ "Increase",
+                                                             info_serv.2$CPD_05E == 2 ~ "Same",
+                                                             info_serv.2$CPD_05E == 3 ~ "Decrease",
+                                                             info_serv.2$CPD_05E == 4 ~ "Not Applicable",
+                                                             ))
+info_serv <- select(info_serv.3, 1, 3)
+```
+
+## Online education services,
+```{r}
+#Inc Dec StaySame CPD_05F
+edu_serv.1 <- select(dataframe,1,CPD_05F)
+#remove all the NA values
+edu_serv.2 <- edu_serv.1[edu_serv.1$CPD_05F != 9,]
+#assiging the variables
+edu_serv.3 <- edu_serv.2 %>% mutate(Edu_Services = case_when(edu_serv.2$CPD_05F == 1 ~ "Increase",
+                                                             edu_serv.2$CPD_05F == 2 ~ "Same",
+                                                             edu_serv.2$CPD_05F == 3 ~ "Decrease",
+                                                             edu_serv.2$CPD_05F == 4 ~ "Not Applicable",
+                                                             ))
+edu_serv <- select(edu_serv.3, 1, 3)
+```
+
+
+# Household Size 
+```{r}
+hhs.1 <- select(dataframe, 1, HHLDSIZC)
+hhs.2 <- hhs.1 %>%
+  mutate(HouseholdSize = case_when(hhs.1$HHLDSIZC == 1 ~ "1",
+                                   hhs.1$HHLDSIZC == 2 ~ "2",
+                                   hhs.1$HHLDSIZC == 3 ~ "3",
+                                   hhs.1$HHLDSIZC == 4 ~ "4",
+                                   hhs.1$HHLDSIZC == 5 ~ "4+",
+                                   ))
+
+HHS <- select(hhs.2, 1,3)
+```
+
+# Age Group Martial Status  Education Level  Rular vs Urban
+```{r}
+#AGEGRP Q. Age of respondent
+age.1 <- select(dataframe, 1, AGEGRP)
+ag1.1 <- age.1 %>%
+  mutate(Age = case_when(age.1$AGEGRP == 01 ~ "15 to 24 years old",
+                         age.1$AGEGRP == 02 ~ "25 to 34 years old",
+                         age.1$AGEGRP == 03 ~ "35 to 44 years old",
+                         age.1$AGEGRP == 04 ~ "45 to 54 years old",
+                         age.1$AGEGRP == 05 ~ "55 to 64 years old",
+                         age.1$AGEGRP == 06 ~ "65 to 74 years old",
+                         age.1$AGEGRP == 07 ~ "75 years and older"
+                         ))
+
+AGE <- select(ag1.1, 1, 3)
+```
+
+# Martial Status 
+```{r}
+#MARSTATC. Q. Marital status of respondent
+mart.1 <- select(dataframe, 1, MARSTATC)
+mart.2 <- mart.1 %>% mutate(Martial.Status = case_when(mart.1$MARSTATC == 1 ~ "Married",
+                                      mart.1$MARSTATC == 2 ~ "Living common-law",
+                                      mart.1$MARSTATC == 3 ~ "Widowed/Separated/Divorced",
+                                      mart.1$MARSTATC == 4 ~ "Single/Never married",
+                                      ))
+
+MARTstat <- select(mart.2, 1, 3)
+```
+
+# Education Level 
+```{r}
+#PEDUC_LC.  Q. Respondents highest level of education ever completed
+edu.1 <- select(dataframe, 1 ,PEDUC_LC )
+edu.2 <- edu.1 %>% mutate(Education.Level = case_when(edu.1$PEDUC_LC == 01 ~ "Less than high school diploma or its equivalent",
+ edu.1$PEDUC_LC == 02 ~ "High school diploma or a high school equivalency certificate",
+ edu.1$PEDUC_LC == 03 ~ "Trade certificate or diploma",
+ edu.1$PEDUC_LC == 04 ~ "College/CEGEP/other non-university certificate or diploma",
+ edu.1$PEDUC_LC == 05 ~ "University certificate or diploma below the bachelor’s level",
+ edu.1$PEDUC_LC == 06 ~ "Bachelor’s degree (e.g. B.A., B.Sc., LL.B.)",
+ edu.1$PEDUC_LC == 07 ~ "University certificate, diploma, degree above the BA level" ))
+
+EduLvl <- select(edu.2, 1, 3)
+```
+
+# Rular vs Urban
+```{r}
+#RURURB Q.Rural/Urban indicator
+RularVsUrban.1 <- select(dataframe, 1,RURURB)
+RularVsUrban.2 <- RularVsUrban.1 %>% mutate(Residence.Area = case_when(RularVsUrban.1$RURURB == 1 ~ "Rural",
+RularVsUrban.1$RURURB == 2 ~ "Urban"))
+
+ResArea <- select(RularVsUrban.2, 1, 3)
+```
+
+
+# Reason for implementing security measure,                                         **Multilevel variable**
+```{r}
+# CS_30JE
+PreReas <- select(dataframe, 1, 47:96)
+
+## filter out the people who answered Not stated and Valid skip for all of the questions
+# take the product of the rows and see which ones had answer as 6^ and 9^ 
+
+#Direction from work
+#Incident reason
+#Not applicable
+
+```
+
+
+# Cyber security measures comp to before                          ***RESPONSE variable***
+Making assumption if any of the question is answered More it's considered More overall throughout the category.
+More
+About the same
+Less
+Not Applicable
+Do a rowsum 
+
+```{r}
+Mode <- function(x) {
+  ux <- unique(x)
+  ux[which.max(tabulate(match(x, ux)))]
+}
+
+Modes <- function(x) {
+  ux <- unique(x)
+  tab <- tabulate(match(x, ux))
+  ux[tab == max(tab)]
+}
+
+```
+
+
+# Cyber security Precautionary measures
+```{r}
+# CS_25A, CS_25B, CS_25C, CS_25D, CS_25E, CS_25F, CS_25G, CS_25H, CS_25I, CS_25J 
+# Comp to before COVID-19, cyber sec:
+CybSec.1 <- select(dataframe, 1, CS_25A, CS_25B, CS_25C, CS_25D, CS_25E, CS_25F, CS_25G, CS_25H, CS_25I, CS_25J)
+## changing all the "Not Applicable" values to 5, for the logic
+CybSec.1[CybSec.1 == 4] <- 5
+CybSec.1[CybSec.1 == 1] <- 0
+
+## row product
+CybSec.2 <- CybSec.1 %>% mutate(prod = CS_25A*CS_25B*CS_25C*CS_25D*CS_25E*CS_25F*CS_25G*CS_25H*CS_25I*CS_25J )
+
+## Removing all the NA values ie prod = 3486784401
+CybSec.3 <- CybSec.2[CybSec.2$prod != 3486784401,]
+
+## prod = 0 = More
+## prod = 2^10 = 1024 = About the same
+## prod = 3^10 = 59049 = Less
+## prod = 5^10 = 9765625 = Not applicable
+
+## Now we combine the About the same and Less to Not more and remove all the people who were not applicable
+#Drop not applicable
+CybSec.4 <- CybSec.3[CybSec.3$prod != 9765625,]
+#Combine About the same and Less to Not more
+CybSec.5 <- CybSec.4  %>% mutate(Precaution = case_when(CybSec.4$prod == 0 ~ "More",
+                                                         CybSec.4$prod != 0 ~ "Not More"))
+#Final variable
+CybSec <- select(CybSec.5, 1, 13)
+
+
+
+
+#mode
+test <- tibble(  apply(CybSec.3[,2:length(CybSec.3)], 1, mfv))
+
+## Summing up all the variables ie rowsum for Logic purpose
+CybSec.2 <- CybSec.1 %>% 
+  mutate(CybSum = rowSums(CybSec.1[,2:10]))
+
+## Remove the people who didn't give a valid answer for any of the questions ie SUM = 9*9=81
+CybSec.2 <- CybSec.1[CybSec.1 != 81,]
+
+wfh.2 <- wfh.1[wfh.1$PCS_20E != 9,]
+```
+The response variable of interest is to see if there was in effort made by the person to better their online presence or improve their data security compared to before COVID.
+Hence we are going to combine any variable that has a valid field i nth
+
+
+
+
+# Will be forming joints to match the dataframes on the basis of the pumfID
+```{r}
+#Merge the 2 cols based on their PUMFID by performing inner join                  #[https://www.statmethods.net/management/merging.html]
+## Audio and video
+final.1 <- merge(audio, vid, by = "PUMFID")
+
+
+## Household Size  Age Group Martial Status  Education Level  Rular vs Urban
+
+final.2 <- merge(HHS, merge(AGE, merge(MARTstat, merge(EduLvl,  merge(SEX, ResArea, by = "PUMFID"  ), by = "PUMFID") ,by = "PUMFID")  ,by = "PUMFID") , by = "PUMFID")
+
+
+
+
+## Combining final.1 and final.2
+final.3 <- merge(final.1, final.2, by = "PUMFID")
+
+
+final.4 <- merge(CybSec, merge(edu_serv, merge(reported, merge(incident, merge(info_serv, merge(loss, merge(OS, merge(social, wfh , by = "PUMFID") , by = "PUMFID"), by = "PUMFID") , by = "PUMFID"), by = "PUMFID")  , by = "PUMFID") , by = "PUMFID"),  by = "PUMFID")
+
+final <- merge(final.3, final.4, by = "PUMFID")
+
+
+### House hold Social media services use, house hold Online video streaming services,  Audio streaming, productivity services,  online information services, Online education services, Reason for implementing security measure, Cyber security measures comp to before,
+ ## Incident, Loss , WFH, Shop Online
+
+
+### test for cor incident X loss
+incXloss <- select(final.4, 6,4)
+
+incXloss[incXloss == "Yes"] <- 1
+incXloss[incXloss == "No"] <- 0
+incXloss$Loss <- as.numeric(incXloss$Loss)
+incXloss$Incident <- as.numeric(incXloss$Incident)
+
+cor()
+#CorPlot1     [sthda.com/english/wiki/correlation-matrix-a-quick-start-guide-to-analyze-format-and-visualize-a-correlation-matrix-using-r-software]
+
+
+res <- cor(incXloss)
+
+res2 <- rcorr(as.matrix(incXloss))
+res2
+
+
+corrplot(res2$r, type="upper", order="hclust", 
+         p.mat = res2$P, sig.level = 0.01, insig = "blank")
+#CorPlot2 
+
+chart.Correlation(incXloss, histogram=TRUE, pch=19)
+
+col<- colorRampPalette(c("blue", "white", "red"))(20)
+heatmap(x = res, col = col, symm = TRUE)
+
+
+
+f3 = merge(df1, df2, by.x=c("PUMFID"), by.y=c("CustomerId", "like"))
+
+
+```
+Loss vs Incident -> Drawback
+
+
+
+
+# Model selection
+
+
+## Model Validation 
+AUC, ROC curves
+
+true-positive-rate
+
+false-positive-rate
+
+PCA
+
+
+
+
+# result 
+make the model
+
+get the coef:
+see what how it effects
+
+get the p-value:
+if p-val >0.05 then rej
+If p-val <0.05 then keep 
+
+
+
+```{r}
+
+```{=latex}
+\begin{table}[ht]
+\caption{Variables for final model} % title of Table
+\centering % used for centering table
+\begin{tabular}{c c c} % centered columns (2 columns)
+\hline \hline
+Variable Name  \\ [0.5ex] % inserts table
+%heading
+\hline % inserts single horizontal line
+
+Intercept & 0.412675 &  0.43839 \\ \hline
+Video Streaming: Increase   &    -0.283354 & 0.27888   \\ 
+Video Streaming: Not Applicable & -0.302079 & 0.28289    \\
+Video Streaming: Same& -0.549102 & **0.03445** \\  \hline
+Household Size: 2 & 0.170107 & 0.05522  \\
+Household Size: 3 & 0.151848 & 0.31211    \\
+HouseholdSize: 4 & 0.517397 & **0.00991** \\
+HouseholdSize: 4+ & 0.119527 & 0.74877    \\ \hline
+Age: 25 to 34 years old & -0.514853 & **0.02018**  \\
+Age: 35 to 44 years old & -0.451976 & **0.03590**  \\
+Age: 45 to 54 years old & -0.207115 & 0.32568    \\
+Age: 55 to 64 years old & 0.152017 & 0.47550    \\
+Age: 65 to 74 years old & 0.213543 & 0.33823    \\
+Age: 75 years and older & -0.005908 & 0.98233    \\ \hline
+Education Services: Increase & -0.445458 & 0.20274    \\
+Education Services: Not Applicable & -0.490735 &  0.15129    \\
+Education Services: Same  & -0.716208 & **0.03820*  \\ \hline
+Incident & 0.554100 & **5.07e-13** \\ \hline
+Information Services: Increase & -0.095966  & 0.82141    \\
+Information Services: Not Applicable & -0.212878 & 0.65396 \\   
+Information Services: Same & -0.546570 & 0.19419    \\ \hline
+Online Shopping: Yes & 0.545710 & **6.52e-06**
+\\ \hline
+               \\[1ex] % [1ex] adds vertical space
+ %inserts single line
+\end{tabular}
+\label{table:nonlin} % is used to refer this table in the text
+\end{table}
+```
+
+```
+
+
+
+```{r}
+
+```{=latex}
+\begin{table}[ht]
+\caption{Variable catogeries significance} % title of Table
+\centering % used for centering table
+\begin{tabular}{c} % centered columns (2 columns)
+\hline\hline
+Variable Catogery \\ [0.5ex] % inserts table
+%heading
+\hline % inserts single horizontal line
+
+Video Streaming \\ 
+Household Size \\ 
+Age \\ 
+Education Services \\ 
+Incident \\ 
+Information Services \\ 
+Online Shopping \\ \hline
+               \\[1ex] % [1ex] adds vertical space
+ %inserts single line
+\end{tabular}
+\label{table:nonlin} % is used to refer this table in the text
+\end{table}
+
+```
+
+
+
+```
+
+
+
+
+
+# Intro
+
+# Data
+
+# Method
+
+# result
+
+# Conclusion
+
+# Biblo
+
+# apendix
+
+
+
+
+
+
+
+
+write_csv(final, "dataset.csv")
+
+# Goal
+In the age of big data and digitization, cybersecurity is one of the greatest concerns in today's world. The goal of this study is to find if there was an increase in the purchase of Cyber Security products during the COVID-19 pandemic. \
+
+# Data
+The data we will be analyzing is from Statistic Canada website the name of the data set is "Canadian Perspectives Survey Series 5: Technology Use and Cyber Security During the Pandemic Public Use Microdata File". This information in the data frame was collected using an online survey, these surveys are conducted on a monthly basis and for our data frame we had a total of 3,961 unique data points and 149 variables.
+Here we are interested in if the person made any sort of purchase or effort to improve and protect against cybersecurity threats. Given this condition, the variable of interest is the answer the person had for the question related to if they Purchased new or additional security software or Set up multi-factor authentication or Checked that the websites where you provided personal data were secure or any other variables related to this in the data frame. In total in the survey, we have 10 questions related to this, so we will be combining them into 1 variable which will be the response variable of our study. \
+
+# Methods
+We are going to be using regression to make this estimate before doing so we are first going to filter and select our data set based on the Treatment versus Control group. The treatment group for this study will be all the people who reported or lost any sort of data or had a cybersecurity threat that they were aware of versus the people who did not face similar issues.
+Based on our data we will be assigning a propensity score and then filtering out and matching our data to make a model.
+We will be using a logistic regression model to study if having a loss had any effect on the Purchase of Cyber Security products.
