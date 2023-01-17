@@ -1,4 +1,4 @@
-# Cyber Security Threat awareness analysis
+# Factors Influencing Cyber Security Precautionary Measures
 This project was a part of my course STA304H1: Surveys, Sampling and Observational Data at UofT. This is an observational study, the data used to conduct this study was collected from Statistics Canada.
 
 ## Goal
